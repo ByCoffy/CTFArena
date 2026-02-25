@@ -42,7 +42,7 @@ Permite a organizadores crear retos de ciberseguridad y a participantes registra
 ### Opción 1: Script automático
 
 ```bash
-git clone https://github.com/ByCoffy/hackarena-ctf.git
+git clone [https://github.com/ByCoffy/hackarena-ctf.git](https://github.com/ByCoffy/CTFArena)
 cd hackarena-ctf
 sudo bash install.sh
 ```
