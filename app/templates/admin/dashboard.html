@@ -36,6 +36,12 @@
             <small class="text-muted">Intentos</small>
         </div>
     </div>
+    <div class="col-6 col-md">
+        <div class="card bg-dark border-secondary text-center p-3">
+            <div class="h3 text-info mb-0">{{ stats.docker_active }}</div>
+            <small class="text-muted">Docker Activas</small>
+        </div>
+    </div>
 </div>
 
 <!-- Admin Links -->
@@ -69,6 +75,21 @@
             <div class="card-body text-center">
                 <i class="bi bi-journal-text display-6 text-danger"></i>
                 <h5 class="mt-2 text-white">Logs</h5>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- Docker Instances Link -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <a href="{{ url_for('admin.docker_instances') }}" class="card bg-dark border-info text-decoration-none h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-terminal display-6 text-info"></i>
+                <h5 class="mt-2 text-white">Instancias Docker</h5>
+                {% if stats.docker_active > 0 %}
+                <span class="badge bg-info">{{ stats.docker_active }} activas</span>
+                {% endif %}
             </div>
         </a>
     </div>

@@ -4,7 +4,7 @@ from flask import render_template, redirect, url_for, flash, request, current_ap
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from app.admin import bp
-from app.models import Challenge, Category, User, Team, Solve, Hint, SubmissionLog
+from app.models import Challenge, Category, User, Team, Solve, Hint, SubmissionLog, DockerInstance
 from app import db
 from datetime import datetime, timezone
 
@@ -29,6 +29,7 @@ def dashboard():
         'challenges': Challenge.query.count(),
         'solves': Solve.query.count(),
         'submissions': SubmissionLog.query.count(),
+        'docker_active': DockerInstance.query.filter_by(status='running').count(),
     }
     recent_submissions = SubmissionLog.query.order_by(
         SubmissionLog.submitted_at.desc()).limit(20).all()
@@ -143,7 +144,13 @@ def create_challenge():
             title=title, description=description, flag=flag,
             points=points, difficulty=difficulty, category_id=category_id,
             author=author, challenge_url=challenge_url,
-            is_active=is_active, starts_at=starts_at, ends_at=ends_at
+            is_active=is_active, starts_at=starts_at, ends_at=ends_at,
+            challenge_type=request.form.get('challenge_type', 'static'),
+            docker_image=request.form.get('docker_image', '').strip() or None,
+            docker_ports=request.form.get('docker_ports', '').strip() or None,
+            docker_timeout=int(request.form.get('docker_timeout', 30) or 30),
+            docker_memory_limit=request.form.get('docker_memory_limit', '256m').strip(),
+            docker_cpu_limit=float(request.form.get('docker_cpu_limit', 0.5) or 0.5),
         )
 
         # Handle file upload
@@ -195,6 +202,14 @@ def edit_challenge(chall_id):
         challenge.challenge_url = request.form.get('challenge_url', '').strip()
         challenge.is_active = 'is_active' in request.form
 
+        # Docker fields
+        challenge.challenge_type = request.form.get('challenge_type', 'static')
+        challenge.docker_image = request.form.get('docker_image', '').strip() or None
+        challenge.docker_ports = request.form.get('docker_ports', '').strip() or None
+        challenge.docker_timeout = int(request.form.get('docker_timeout', 30) or 30)
+        challenge.docker_memory_limit = request.form.get('docker_memory_limit', '256m').strip()
+        challenge.docker_cpu_limit = float(request.form.get('docker_cpu_limit', 0.5) or 0.5)
+
         starts_at_str = request.form.get('starts_at', '').strip()
         ends_at_str = request.form.get('ends_at', '').strip()
         challenge.starts_at = datetime.fromisoformat(starts_at_str).replace(
@@ -237,6 +252,16 @@ def edit_challenge(chall_id):
 @admin_required
 def delete_challenge(chall_id):
     challenge = Challenge.query.get_or_404(chall_id)
+    # Stop and delete Docker instances
+    running_instances = DockerInstance.query.filter_by(
+        challenge_id=chall_id, status='running').all()
+    for inst in running_instances:
+        try:
+            from app.services.docker_service import DockerService
+            DockerService.stop_instance(inst)
+        except Exception:
+            pass
+    DockerInstance.query.filter_by(challenge_id=chall_id).delete()
     # Delete related records
     Solve.query.filter_by(challenge_id=chall_id).delete()
     SubmissionLog.query.filter_by(challenge_id=chall_id).delete()
@@ -301,3 +326,25 @@ def submission_logs():
     logs = SubmissionLog.query.order_by(
         SubmissionLog.submitted_at.desc()).paginate(page=page, per_page=50)
     return render_template('admin/logs.html', logs=logs)
+
+
+# --- Docker Instance Management ---
+
+@bp.route('/docker-instances')
+@admin_required
+def docker_instances():
+    instances = DockerInstance.query.filter(
+        DockerInstance.status.in_(['running', 'creating'])
+    ).order_by(DockerInstance.created_at.desc()).all()
+    return render_template('admin/docker_instances.html', instances=instances)
+
+
+@bp.route('/docker-instances/<int:instance_id>/stop', methods=['POST'])
+@admin_required
+def stop_docker_instance(instance_id):
+    instance = DockerInstance.query.get_or_404(instance_id)
+    if instance.status == 'running':
+        from app.services.docker_service import DockerService
+        DockerService.stop_instance(instance)
+        flash(f'Instancia {instance.container_name} detenida.', 'info')
+    return redirect(url_for('admin.docker_instances'))

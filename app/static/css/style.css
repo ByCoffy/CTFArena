@@ -113,3 +113,62 @@ input[placeholder="FLAG{...}"] {
     border-color: var(--ctf-green);
     box-shadow: 0 0 0 0.2rem rgba(0, 255, 136, 0.15);
 }
+
+/* Docker Terminal */
+.terminal-container {
+    background: #000;
+    border: 1px solid #333;
+    border-radius: 6px;
+    overflow: hidden;
+    min-height: 350px;
+}
+
+.terminal-header {
+    background: #16213e;
+    padding: 6px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #333;
+    font-size: 0.85rem;
+}
+
+.terminal-header .timer {
+    font-family: 'Courier New', monospace;
+    color: var(--ctf-green);
+}
+
+.terminal-header .timer.warning {
+    color: #ffc107;
+}
+
+.terminal-header .timer.critical {
+    color: #ff4444;
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    50% { opacity: 0.4; }
+}
+
+.instance-status {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+}
+
+.instance-status.running {
+    background: var(--ctf-green);
+    box-shadow: 0 0 6px rgba(0, 255, 136, 0.5);
+}
+
+.instance-status.stopped {
+    background: #ff4444;
+}
+
+.instance-status.creating {
+    background: #ffc107;
+    animation: blink 1s infinite;
+}

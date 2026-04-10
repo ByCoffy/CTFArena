@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}Instancias Docker — Admin{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2><i class="bi bi-terminal text-info me-2"></i>Instancias Docker Activas</h2>
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-arrow-left me-2"></i>Volver al Panel
+    </a>
+</div>
+
+{% if instances %}
+<div class="table-responsive">
+    <table class="table table-dark table-hover align-middle">
+        <thead>
+            <tr>
+                <th>Usuario</th>
+                <th>Reto</th>
+                <th>Contenedor</th>
+                <th class="text-center">Estado</th>
+                <th class="text-center">Tiempo Restante</th>
+                <th>Creado</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for inst in instances %}
+            <tr>
+                <td>
+                    <a href="{{ url_for('main.profile', username=inst.user.username) }}" class="text-decoration-none text-white">
+                        {{ inst.user.username }}
+                    </a>
+                </td>
+                <td>{{ inst.challenge.title }}</td>
+                <td><code class="small">{{ inst.container_name }}</code></td>
+                <td class="text-center">
+                    {% if inst.status == 'running' %}
+                    <span class="badge bg-success">Activo</span>
+                    {% elif inst.status == 'creating' %}
+                    <span class="badge bg-warning">Creando</span>
+                    {% else %}
+                    <span class="badge bg-secondary">{{ inst.status }}</span>
+                    {% endif %}
+                </td>
+                <td class="text-center">
+                    {% set remaining = inst.time_remaining_seconds() %}
+                    {% if remaining > 0 %}
+                    <span class="font-monospace {% if remaining < 300 %}text-danger{% else %}text-success{% endif %}">
+                        {{ '%02d:%02d' | format(remaining // 60, remaining % 60) }}
+                    </span>
+                    {% else %}
+                    <span class="text-danger">Expirado</span>
+                    {% endif %}
+                </td>
+                <td class="text-muted small">{{ inst.created_at.strftime('%d/%m %H:%M') }}</td>
+                <td>
+                    {% if inst.status == 'running' %}
+                    <form method="POST" action="{{ url_for('admin.stop_docker_instance', instance_id=inst.id) }}" class="d-inline"
+                          onsubmit="return confirm('¿Detener esta instancia?')">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                            <i class="bi bi-stop-fill me-1"></i>Detener
+                        </button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="text-center py-5">
+    <i class="bi bi-terminal display-1 text-muted"></i>
+    <h4 class="text-muted mt-3">No hay instancias Docker activas</h4>
+</div>
+{% endif %}
+{% endblock %}

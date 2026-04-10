@@ -72,6 +72,15 @@
                     </div>
 
                     <div class="mt-3">
+                        <label class="form-label">Tipo de Reto</label>
+                        <select name="challenge_type" id="challenge_type" class="form-select bg-black border-secondary text-white"
+                                onchange="toggleDockerFields()">
+                            <option value="static" {{ 'selected' if not challenge or challenge.challenge_type == 'static' }}>Estático (clásico)</option>
+                            <option value="docker" {{ 'selected' if challenge and challenge.challenge_type == 'docker' }}>Docker (interactivo)</option>
+                        </select>
+                    </div>
+
+                    <div class="mt-3">
                         <label class="form-label">Archivo Adjunto</label>
                         <input type="file" name="attachment" class="form-control bg-black border-secondary text-white">
                         {% if challenge and challenge.attachment_filename %}
@@ -146,6 +155,47 @@
                 </div>
             </div>
 
+            <!-- Docker Configuration -->
+            <div class="card bg-dark border-info mt-3" id="docker-config" style="display: none;">
+                <div class="card-body">
+                    <h5><i class="bi bi-terminal text-info me-2"></i>Configuración Docker</h5>
+                    <div class="mb-3">
+                        <label class="form-label">Imagen Docker *</label>
+                        <input type="text" name="docker_image" class="form-control bg-black border-secondary text-white font-monospace"
+                               value="{{ challenge.docker_image if challenge else '' }}" placeholder="hackarena/web-sqli:latest">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Puertos (JSON)</label>
+                        <input type="text" name="docker_ports" class="form-control bg-black border-secondary text-white font-monospace"
+                               value="{{ challenge.docker_ports if challenge else '' }}" placeholder='{"22": "ssh", "80": "http"}'>
+                        <small class="text-muted">Formato: {"puerto": "servicio"}</small>
+                    </div>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label">Timeout (min)</label>
+                            <input type="number" name="docker_timeout" class="form-control bg-black border-secondary text-white"
+                                   value="{{ challenge.docker_timeout if challenge else 30 }}" min="5" max="120">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">RAM</label>
+                            <select name="docker_memory_limit" class="form-select bg-black border-secondary text-white">
+                                {% for val in ['128m','256m','512m','1g'] %}
+                                <option value="{{ val }}" {{ 'selected' if challenge and challenge.docker_memory_limit == val }}>{{ val }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">CPU</label>
+                            <select name="docker_cpu_limit" class="form-select bg-black border-secondary text-white">
+                                {% for val in ['0.25','0.5','1.0','2.0'] %}
+                                <option value="{{ val }}" {{ 'selected' if challenge and challenge.docker_cpu_limit|string == val }}>{{ val }} cores</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Actions -->
             <div class="d-grid gap-2 mt-3">
                 <button type="submit" class="btn btn-success btn-lg">
@@ -177,5 +227,13 @@ function addHint() {
     `;
     container.appendChild(row);
 }
+
+function toggleDockerFields() {
+    const type = document.getElementById('challenge_type').value;
+    const dockerConfig = document.getElementById('docker-config');
+    dockerConfig.style.display = type === 'docker' ? 'block' : 'none';
+}
+// Run on page load
+document.addEventListener('DOMContentLoaded', toggleDockerFields);
 </script>
 {% endblock %}

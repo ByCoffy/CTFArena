@@ -141,6 +141,9 @@ class Challenge(db.Model):
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     author = db.Column(db.String(64), default='Admin')
 
+    # Challenge type: static (default) or docker
+    challenge_type = db.Column(db.String(20), nullable=False, default='static')
+
     # Time-limited challenge
     starts_at = db.Column(db.DateTime, nullable=True)
     ends_at = db.Column(db.DateTime, nullable=True)
@@ -151,10 +154,18 @@ class Challenge(db.Model):
     # URL for external challenge (e.g., Docker container)
     challenge_url = db.Column(db.String(512), nullable=True)
 
+    # Docker-specific fields
+    docker_image = db.Column(db.String(256), nullable=True)
+    docker_ports = db.Column(db.Text, nullable=True)  # JSON: {"22": "ssh", "80": "http"}
+    docker_timeout = db.Column(db.Integer, nullable=True, default=30)  # minutes
+    docker_memory_limit = db.Column(db.String(20), nullable=True, default='256m')
+    docker_cpu_limit = db.Column(db.Float, nullable=True, default=0.5)
+
     # Relationships
     solves = db.relationship('Solve', backref='challenge', lazy='dynamic')
     hints = db.relationship('Hint', backref='challenge', lazy='dynamic',
                              order_by='Hint.order')
+    docker_instances = db.relationship('DockerInstance', backref='challenge', lazy='dynamic')
 
     def solve_count(self):
         return self.solves.count()
@@ -197,6 +208,9 @@ class Challenge(db.Model):
             'insane': ('Insane', 'dark')
         }
         return badges.get(self.difficulty, ('Media', 'warning'))
+
+    def is_docker(self):
+        return self.challenge_type == 'docker'
 
     def __repr__(self):
         return f'<Challenge {self.title}>'
@@ -246,3 +260,35 @@ class SubmissionLog(db.Model):
 
     user = db.relationship('User', backref='submissions')
     challenge = db.relationship('Challenge', backref='submissions')
+
+
+class DockerInstance(db.Model):
+    __tablename__ = 'docker_instances'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    challenge_id = db.Column(db.Integer, db.ForeignKey('challenges.id'), nullable=False)
+    container_id = db.Column(db.String(128), nullable=True)
+    container_name = db.Column(db.String(128), unique=True, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default='creating')  # creating, running, stopped, error
+    port_mappings = db.Column(db.Text, nullable=True)  # JSON
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    expires_at = db.Column(db.DateTime, nullable=False)
+    error_message = db.Column(db.String(512), nullable=True)
+
+    user = db.relationship('User', backref=db.backref('docker_instances', lazy='dynamic'))
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'challenge_id', 'status',
+                            name='unique_active_instance'),
+    )
+
+    def is_expired(self):
+        return datetime.now(timezone.utc) > self.expires_at
+
+    def time_remaining_seconds(self):
+        delta = self.expires_at - datetime.now(timezone.utc)
+        return max(int(delta.total_seconds()), 0)
+
+    def __repr__(self):
+        return f'<DockerInstance user={self.user_id} challenge={self.challenge_id} status={self.status}>'

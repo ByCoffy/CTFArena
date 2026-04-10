@@ -1,6 +1,60 @@
 {% extends "base.html" %}
 {% block title %}{{ challenge.title }} — {{ ctf_name }}{% endblock %}
 
+{% block extra_head %}
+{% if challenge.is_docker() %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css">
+<style>
+    #terminal-container {
+        background: #000;
+        border-radius: 8px;
+        padding: 8px;
+        border: 1px solid #333;
+        position: relative;
+    }
+    #terminal-container .xterm {
+        padding: 4px;
+    }
+    .terminal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        background: #111;
+        border-radius: 8px 8px 0 0;
+        border: 1px solid #333;
+        border-bottom: none;
+    }
+    .terminal-timer {
+        font-family: 'Courier New', monospace;
+        font-size: 1.1rem;
+        color: var(--ctf-green);
+    }
+    .terminal-timer.warning {
+        color: #ffd60a;
+    }
+    .terminal-timer.critical {
+        color: #e63946;
+        animation: blink 1s infinite;
+    }
+    @keyframes blink {
+        50% { opacity: 0.5; }
+    }
+    .instance-status {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 6px;
+    }
+    .instance-status.running { background: var(--ctf-green); box-shadow: 0 0 6px var(--ctf-green); }
+    .instance-status.creating { background: #ffd60a; }
+    .instance-status.stopped { background: #666; }
+    .instance-status.error { background: #e63946; }
+</style>
+{% endif %}
+{% endblock %}
+
 {% block content %}
 <div class="row g-4">
     <!-- Challenge Info -->
@@ -69,6 +123,73 @@
                     <a href="{{ challenge.challenge_url }}" target="_blank" class="btn btn-outline-warning">
                         <i class="bi bi-box-arrow-up-right me-2"></i>Abrir Challenge
                     </a>
+                </div>
+                {% endif %}
+
+                <!-- Docker Terminal Section -->
+                {% if challenge.is_docker() %}
+                <div class="card bg-black border-info mb-4">
+                    <div class="card-body">
+                        <h5><i class="bi bi-terminal text-info me-2"></i>Reto Interactivo (Docker)</h5>
+
+                        {% if docker_instance and docker_instance.status == 'running' %}
+                        <!-- Terminal Header with controls -->
+                        <div class="terminal-header">
+                            <div>
+                                <span class="instance-status running"></span>
+                                <span class="text-success fw-bold">Instancia Activa</span>
+                            </div>
+                            <div class="d-flex align-items-center gap-3">
+                                <span class="terminal-timer" id="docker-timer" data-remaining="{{ docker_instance.time_remaining_seconds() }}">
+                                    --:--
+                                </span>
+                                <div class="btn-group btn-group-sm">
+                                    <form method="POST" action="{{ url_for('docker_challenges.restart_instance', challenge_id=challenge.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-outline-warning btn-sm" title="Reiniciar"
+                                                onclick="return confirm('¿Reiniciar la instancia? Se perderá todo el progreso.')">
+                                            <i class="bi bi-arrow-clockwise"></i>
+                                        </button>
+                                    </form>
+                                    <form method="POST" action="{{ url_for('docker_challenges.stop_instance', challenge_id=challenge.id) }}" class="d-inline">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm" title="Detener">
+                                            <i class="bi bi-stop-fill"></i>
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Terminal -->
+                        <div id="terminal-container" data-instance-id="{{ docker_instance.id }}"></div>
+
+                        {% if docker_instance.port_mappings %}
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <i class="bi bi-hdd-network me-1"></i>Puertos:
+                                {% for port, info in (docker_instance.port_mappings | from_json).items() %}
+                                <span class="badge bg-secondary ms-1">{{ info.service }}: {{ info.host_port }}</span>
+                                {% endfor %}
+                            </small>
+                        </div>
+                        {% endif %}
+
+                        {% else %}
+                        <!-- Start button -->
+                        <p class="text-muted mb-3">
+                            Este reto requiere una instancia Docker personal. Se creará un contenedor aislado con un terminal interactivo.
+                        </p>
+                        <div class="d-flex align-items-center gap-3">
+                            <form method="POST" action="{{ url_for('docker_challenges.start_instance', challenge_id=challenge.id) }}">
+                                <button type="submit" class="btn btn-info">
+                                    <i class="bi bi-play-fill me-2"></i>Iniciar Reto
+                                </button>
+                            </form>
+                            <small class="text-muted">
+                                <i class="bi bi-clock me-1"></i>Duración: {{ challenge.docker_timeout or 30 }} minutos
+                                · <i class="bi bi-memory me-1"></i>RAM: {{ challenge.docker_memory_limit or '256m' }}
+                            </small>
+                        </div>
+                        {% endif %}
+                    </div>
                 </div>
                 {% endif %}
 
@@ -176,4 +297,118 @@
         </a>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if challenge.is_docker() and docker_instance and docker_instance.status == 'running' %}
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const terminalContainer = document.getElementById('terminal-container');
+    const instanceId = terminalContainer.dataset.instanceId;
+    const timerEl = document.getElementById('docker-timer');
+    let remaining = parseInt(timerEl.dataset.remaining);
+
+    // Timer
+    function updateTimer() {
+        if (remaining <= 0) {
+            timerEl.textContent = 'EXPIRADO';
+            timerEl.className = 'terminal-timer critical';
+            return;
+        }
+        remaining--;
+        const mins = Math.floor(remaining / 60);
+        const secs = remaining % 60;
+        timerEl.textContent = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+
+        if (remaining < 60) {
+            timerEl.className = 'terminal-timer critical';
+        } else if (remaining < 300) {
+            timerEl.className = 'terminal-timer warning';
+        }
+    }
+    updateTimer();
+    setInterval(updateTimer, 1000);
+
+    // Terminal
+    const term = new Terminal({
+        cursorBlink: true,
+        fontSize: 14,
+        fontFamily: "'Courier New', 'Fira Code', monospace",
+        theme: {
+            background: '#0a0a0f',
+            foreground: '#00ff88',
+            cursor: '#00ff88',
+            selectionBackground: '#00ff8844',
+        },
+        scrollback: 5000,
+    });
+
+    const fitAddon = new FitAddon.FitAddon();
+    const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+    term.loadAddon(fitAddon);
+    term.loadAddon(webLinksAddon);
+    term.open(terminalContainer);
+    fitAddon.fit();
+
+    term.writeln('\x1b[33m[HackArena] Conectando al contenedor...\x1b[0m\r\n');
+
+    // WebSocket
+    const socket = io('/terminal', {
+        transports: ['websocket'],
+    });
+
+    socket.on('connect', function() {
+        socket.emit('start_terminal', {instance_id: parseInt(instanceId)});
+    });
+
+    socket.on('terminal_ready', function() {
+        term.writeln('\x1b[32m[HackArena] Terminal conectada.\x1b[0m\r\n');
+        // Send initial resize
+        socket.emit('terminal_resize', {
+            instance_id: parseInt(instanceId),
+            rows: term.rows,
+            cols: term.cols,
+        });
+    });
+
+    socket.on('terminal_output', function(data) {
+        term.write(data.data);
+    });
+
+    socket.on('terminal_error', function(data) {
+        term.writeln('\x1b[31m[Error] ' + data.message + '\x1b[0m');
+    });
+
+    socket.on('disconnect', function() {
+        term.writeln('\r\n\x1b[31m[HackArena] Conexión perdida.\x1b[0m');
+    });
+
+    // Send input
+    term.onData(function(data) {
+        socket.emit('terminal_input', {
+            instance_id: parseInt(instanceId),
+            data: data,
+        });
+    });
+
+    // Handle resize
+    window.addEventListener('resize', function() {
+        fitAddon.fit();
+        socket.emit('terminal_resize', {
+            instance_id: parseInt(instanceId),
+            rows: term.rows,
+            cols: term.cols,
+        });
+    });
+
+    new ResizeObserver(function() {
+        fitAddon.fit();
+    }).observe(terminalContainer);
+});
+</script>
+{% endif %}
 {% endblock %}

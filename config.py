@@ -30,3 +30,13 @@ class Config:
     ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME') or 'admin'
     ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL') or 'admin@hackarena.local'
     ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD') or 'AdminCTF2025!'
+
+    # Docker Challenges
+    DOCKER_BASE_URL = os.environ.get('DOCKER_BASE_URL') or 'unix://var/run/docker.sock'
+    DOCKER_NETWORK = os.environ.get('DOCKER_NETWORK') or 'ctf_challenges'
+    DOCKER_DEFAULT_TIMEOUT = int(os.environ.get('DOCKER_DEFAULT_TIMEOUT', 30))  # minutes
+    DOCKER_DEFAULT_MEMORY = os.environ.get('DOCKER_DEFAULT_MEMORY') or '256m'
+    DOCKER_DEFAULT_CPU = float(os.environ.get('DOCKER_DEFAULT_CPU', 0.5))
+    DOCKER_MAX_INSTANCES_PER_USER = int(os.environ.get('DOCKER_MAX_INSTANCES_PER_USER', 3))
+    DOCKER_PORT_RANGE_START = int(os.environ.get('DOCKER_PORT_RANGE_START', 10000))
+    DOCKER_PORT_RANGE_END = int(os.environ.get('DOCKER_PORT_RANGE_END', 20000))
