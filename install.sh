@@ -39,7 +39,7 @@ apt update && apt upgrade -y
 
 echo -e "${YELLOW}[*] Instalando dependencias...${NC}"
 apt install -y python3 python3-pip python3-venv mariadb-server mariadb-client \
-    nginx certbot python3-certbot-nginx git
+    nginx git
 
 echo -e "${YELLOW}[*] Configurando MariaDB...${NC}"
 systemctl start mariadb
@@ -162,4 +162,3 @@ echo -e "${GREEN}║  - Reiniciar: systemctl restart hackarena-ctf            �
 echo -e "${GREEN}╚═══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${YELLOW}[!] GUARDA estas credenciales en un lugar seguro.${NC}"
-echo -e "${YELLOW}[!] Para HTTPS, ejecuta: sudo certbot --nginx -d tudominio.com${NC}"
