@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
 from app import db, login_manager
@@ -9,13 +9,13 @@ from app import db, login_manager
 team_members = db.Table('team_members',
     db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
     db.Column('team_id', db.Integer, db.ForeignKey('teams.id'), primary_key=True),
-    db.Column('joined_at', db.DateTime, default=lambda: datetime.now(timezone.utc))
+    db.Column('joined_at', db.DateTime, default=datetime.utcnow)
 )
 
 hint_unlocks = db.Table('hint_unlocks',
     db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True),
     db.Column('hint_id', db.Integer, db.ForeignKey('hints.id'), primary_key=True),
-    db.Column('unlocked_at', db.DateTime, default=lambda: datetime.now(timezone.utc))
+    db.Column('unlocked_at', db.DateTime, default=datetime.utcnow)
 )
 
 
@@ -30,8 +30,8 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(256), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
     is_active_user = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    last_seen = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_seen = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Avatar/profile
     bio = db.Column(db.String(500), default='')
@@ -92,7 +92,7 @@ class Team(db.Model):
     description = db.Column(db.String(500), default='')
     invite_code = db.Column(db.String(32), unique=True, nullable=False)
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Members
     members = db.relationship('User', backref='team_ref',
@@ -138,7 +138,7 @@ class Challenge(db.Model):
     difficulty = db.Column(db.String(20), nullable=False, default='medium')  # easy, medium, hard, insane
     category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False)
     is_active = db.Column(db.Boolean, default=True)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     author = db.Column(db.String(64), default='Admin')
 
     # Challenge type: static (default) or docker
@@ -174,7 +174,7 @@ class Challenge(db.Model):
         """Check if challenge is within its time window."""
         if not self.is_active:
             return False
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
         if self.starts_at and now < self.starts_at:
             return False
         if self.ends_at and now > self.ends_at:
@@ -186,7 +186,7 @@ class Challenge(db.Model):
 
     def time_remaining(self):
         if self.ends_at:
-            now = datetime.now(timezone.utc)
+            now = datetime.utcnow()
             delta = self.ends_at - now
             if delta.total_seconds() > 0:
                 return delta
@@ -222,7 +222,7 @@ class Solve(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     challenge_id = db.Column(db.Integer, db.ForeignKey('challenges.id'), nullable=False)
-    solved_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), index=True)
+    solved_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     is_first_blood = db.Column(db.Boolean, default=False)
 
     __table_args__ = (
@@ -256,7 +256,7 @@ class SubmissionLog(db.Model):
     submitted_flag = db.Column(db.String(256), nullable=False)
     is_correct = db.Column(db.Boolean, nullable=False)
     ip_address = db.Column(db.String(45), nullable=True)
-    submitted_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship('User', backref='submissions')
     challenge = db.relationship('Challenge', backref='submissions')
@@ -272,7 +272,7 @@ class DockerInstance(db.Model):
     container_name = db.Column(db.String(128), unique=True, nullable=False)
     status = db.Column(db.String(20), nullable=False, default='creating')  # creating, running, stopped, error
     port_mappings = db.Column(db.Text, nullable=True)  # JSON
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
     expires_at = db.Column(db.DateTime, nullable=False)
     error_message = db.Column(db.String(512), nullable=True)
 
@@ -284,10 +284,12 @@ class DockerInstance(db.Model):
     )
 
     def is_expired(self):
-        return datetime.now(timezone.utc) > self.expires_at
+        now = datetime.utcnow()
+        return now > self.expires_at
 
     def time_remaining_seconds(self):
-        delta = self.expires_at - datetime.now(timezone.utc)
+        now = datetime.utcnow()
+        delta = self.expires_at - now
         return max(int(delta.total_seconds()), 0)
 
     def __repr__(self):

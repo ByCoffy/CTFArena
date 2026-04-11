@@ -1,7 +1,7 @@
 import json
 import logging
 import docker
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from flask import current_app
 from app import db
 from app.models import DockerInstance
@@ -62,7 +62,7 @@ class DockerService:
         cpu_limit = challenge.docker_cpu_limit or current_app.config.get('DOCKER_DEFAULT_CPU', 0.5)
         network_name = current_app.config.get('DOCKER_NETWORK', 'ctf_challenges')
 
-        container_name = f"ctf_{user.id}_{challenge.id}_{int(datetime.now(timezone.utc).timestamp())}"
+        container_name = f"ctf_{user.id}_{challenge.id}_{int(datetime.utcnow().timestamp())}"
 
         # Parse ports to expose
         port_bindings = {}
@@ -83,7 +83,7 @@ class DockerService:
             challenge_id=challenge.id,
             container_name=container_name,
             status='creating',
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=timeout_minutes)
+            expires_at=datetime.utcnow() + timedelta(minutes=timeout_minutes)
         )
         db.session.add(instance)
         db.session.commit()
@@ -200,7 +200,7 @@ class DockerService:
         with app.app_context():
             expired = DockerInstance.query.filter(
                 DockerInstance.status == 'running',
-                DockerInstance.expires_at < datetime.now(timezone.utc)
+                DockerInstance.expires_at < datetime.utcnow()
             ).all()
 
             for instance in expired:

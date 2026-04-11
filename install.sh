@@ -39,7 +39,32 @@ apt update && apt upgrade -y
 
 echo -e "${YELLOW}[*] Instalando dependencias...${NC}"
 apt install -y python3 python3-pip python3-venv mariadb-server mariadb-client \
-    nginx git
+    nginx git gcc
+
+# --- Docker CE ---
+echo -e "${YELLOW}[*] Instalando Docker CE...${NC}"
+if ! command -v docker &> /dev/null; then
+    apt install -y ca-certificates curl gnupg
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+
+    # Detect distro: use bookworm for Kali/unknown
+    DISTRO_CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME")
+    if [ -z "$DISTRO_CODENAME" ] || [ "$DISTRO_CODENAME" = "kali-rolling" ]; then
+        DISTRO_CODENAME="bookworm"
+    fi
+
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $DISTRO_CODENAME stable" | \
+        tee /etc/apt/sources.list.d/docker.list > /dev/null
+    apt update
+    apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+    systemctl enable docker
+    systemctl start docker
+    echo -e "${GREEN}[+] Docker CE instalado.${NC}"
+else
+    echo -e "${GREEN}[+] Docker ya está instalado.${NC}"
+fi
 
 echo -e "${YELLOW}[*] Configurando MariaDB...${NC}"
 systemctl start mariadb
@@ -63,7 +88,7 @@ python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
-pip install gunicorn
+pip install gunicorn eventlet
 
 # Create .env file
 cat > .env << EOF
@@ -93,9 +118,25 @@ sed -i '1s/^/from dotenv import load_dotenv\nload_dotenv()\n\n/' config.py
 # Initialize database
 python setup_db.py
 
+# Build Docker challenge images
+if [ -d "${APP_DIR}/docker_challenges" ]; then
+    echo -e "${YELLOW}[*] Construyendo imágenes Docker de retos...${NC}"
+    for dir in ${APP_DIR}/docker_challenges/*/; do
+        if [ -f "${dir}Dockerfile" ]; then
+            IMG_NAME="ctfarena/$(basename $dir):latest"
+            echo -e "  Building ${IMG_NAME}..."
+            docker build -t "$IMG_NAME" "$dir"
+        fi
+    done
+    echo -e "${GREEN}[+] Imágenes Docker construidas.${NC}"
+fi
+
 # Create uploads directory
 mkdir -p app/static/uploads
 chown -R www-data:www-data ${APP_DIR}
+
+# Add www-data to docker group
+usermod -aG docker www-data
 
 echo -e "${YELLOW}[*] Configurando Gunicorn como servicio...${NC}"
 cat > /etc/systemd/system/hackarena-ctf.service << EOF
@@ -109,7 +150,7 @@ Group=www-data
 WorkingDirectory=${APP_DIR}
 Environment="PATH=${APP_DIR}/venv/bin"
 EnvironmentFile=${APP_DIR}/.env
-ExecStart=${APP_DIR}/venv/bin/gunicorn --workers 4 --bind 127.0.0.1:5000 run:app
+ExecStart=${APP_DIR}/venv/bin/gunicorn -k eventlet -w 1 --bind 127.0.0.1:5000 run:app
 Restart=always
 
 [Install]
@@ -134,6 +175,17 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /socket.io/ {
+        proxy_pass http://127.0.0.1:5000/socket.io/;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 86400;
     }
 
     location /static {

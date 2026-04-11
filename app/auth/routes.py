@@ -3,7 +3,7 @@ from flask_login import login_user, logout_user, current_user, login_required
 from app.auth import bp
 from app.models import User
 from app import db
-from datetime import datetime, timezone
+from datetime import datetime
 
 
 @bp.route('/register', methods=['GET', 'POST'])
@@ -70,7 +70,7 @@ def login():
             return render_template('auth/login.html')
 
         login_user(user, remember=bool(remember))
-        user.last_seen = datetime.now(timezone.utc)
+        user.last_seen = datetime.utcnow()
         db.session.commit()
 
         next_page = request.args.get('next')
